@@ -1,0 +1,176 @@
+Explanation of the  project List  API
+
+
+
+
+Database Connection: The create_connection function connects to the MySQL database.
+Endpoints:
+/projects:
+GET: Retrieves all project records from the projects table.
+POST: Adds a new project with JSON payload.
+/projects/<int:project_id>:
+GET: Retrieves detailed information about a specific project.
+PUT: Updates an existing project.
+DELETE: Deletes a project by ID.
+/projects/<int:project_id>/income:
+POST: Adds income for a specific project and updates the total income.
+/projects/<int:project_id>/expenses:
+POST: Adds expenses for a specific project and updates the total expenses.
+/projects/<int:project_id>/profitability:
+GET: Calculates and returns the profitability percentage for a specific project.
+
+
+
+
+POSTMAN DATA
+
+Testing the API on Postman
+Here are the endpoints to test with example dummy data:
+
+Get All Projects:
+
+URL: http://localhost:5000/projects
+Method: GET
+Response: A list of project records.
+Add New Project:
+
+URL: http://localhost:5000/projects
+Method: POST
+Body (JSON):
+json
+Copy code
+{
+  "project_name": "Project Alpha",
+  "project_status": "Ongoing",
+  "total_income": 10000.00,
+  "total_expenses": 5000.00,
+  "profitability_percentage": 50.00
+}
+Get Specific Project:
+
+URL: http://localhost:5000/projects/1
+Method: GET
+Response: Detailed information about the project with ID 1.
+Update Project:
+
+URL: http://localhost:5000/projects/1
+Method: PUT
+Body (JSON):
+json
+Copy code
+{
+  "project_name": "Project Alpha Updated",
+  "project_status": "Completed",
+  "total_income": 12000.00,
+  "total_expenses": 7000.00,
+  "profitability_percentage": 41.67
+}
+Delete Project:
+
+URL: http://localhost:5000/projects/1
+Method: DELETE
+Response: Message confirming the deletion of the project.
+Add Income to Project:
+
+URL: http://localhost:5000/projects/1/income
+Method: POST
+Body (JSON):
+json
+Copy code
+{
+  "date": "2024-10-17",
+  "source": "Product Sale",
+  "amount": 5000.00,
+  "category": "Product Sale",
+  "payment_method": "Bank Transfer",
+  "transaction_id": "TX12346",
+  "notes": "Sale of product Y"
+}
+Add Expense to Project:
+
+URL: http://localhost:5000/projects/1/expenses
+Method: POST
+Body (JSON):
+json
+Copy code
+{
+  "date": "2024-10-16",
+  "category": "Marketing",
+  "amount": 1500.00,
+  "notes": "Social media ads",
+  "payment_method": "Credit Card"
+}
+Calculate Profitability for Project:
+
+URL: http://localhost:5000/projects/1/profitability
+Method: GET
+Response: Profitability data for the project.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Explaination of filters api
+
+
+
+/projects/filter:
+
+Method: GET
+Description: Filters projects based on the specified criteria:
+Query Parameters:
+status: Filter projects by project status (e.g., Completed, Ongoing, Cancelled).
+min_profitability: Minimum profitability percentage (default: 0%).
+max_profitability: Maximum profitability percentage (default: 100%).
+client_id: Optional filter for projects belonging to a specific client.
+Response: A list of projects that match the filter criteria.
+/clients:
+
+Method: GET
+Description: Retrieves all clients from the clients table.
+Method: POST
+Description: Adds a new client.
+Body (JSON):
+json
+Copy code
+{
+  "client_name": "Client A"
+}
+
+
+
+POSTMAN DATA
+Testing the New Endpoints on Postman
+Here are the new endpoints to test with example dummy data:
+
+Filter Projects:
+
+URL: http://localhost:5000/projects/filter?status=Ongoing&min_profitability=20&max_profitability=80&client_id=1
+Method: GET
+Response: A list of projects that match the filter criteria.
+Get All Clients:
+
+URL: http://localhost:5000/clients
+Method: GET
+Response: A list of all clients.
+Add New Client:
+
+URL: http://localhost:5000/clients
+Method: POST
+Body (JSON):
+json
+Copy code
+{
+  "client_name": "Client B"
+}
