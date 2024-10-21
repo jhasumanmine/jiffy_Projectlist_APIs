@@ -1,178 +1,91 @@
-from flask import Flask, request, jsonify
+from flask import Flask, jsonify
 import mysql.connector
 from mysql.connector import Error
+from decimal import Decimal
 
 app = Flask(__name__)
 
-def create_connection():
-    connection = None
+# Database connection function
+def db_connection():
     try:
         connection = mysql.connector.connect(
             host='localhost',
-            user='root',
-            password='',
-            database='income_panel'
+            database='income_panel',  # Your database name
+            user='root',  # Your MySQL username
+            password=''  # Your MySQL password
         )
+        return connection
     except Error as e:
         print(f"Error: {e}")
-    return connection
+        return None
 
-@app.route('/projects', methods=['GET', 'POST'])
-def manage_projects():
-    connection = create_connection()
-    if request.method == 'GET':
+# API to get income vs expenses data for bar chart
+@app.route('/api/financials', methods=['GET'])
+def get_financials():
+    try:
+        connection = db_connection()
         cursor = connection.cursor(dictionary=True)
-        cursor.execute("SELECT * FROM projects")
-        projects_data = cursor.fetchall()
-        cursor.close()
-        return jsonify(projects_data)
-    
-    elif request.method == 'POST':
-        data = request.json
-        query = """INSERT INTO projects (project_name, project_status, total_income, total_expenses, profitability_percentage)
-                   VALUES (%s, %s, %s, %s, %s)"""
-        values = (data['project_name'], data['project_status'], data['total_income'],
-                  data['total_expenses'], data['profitability_percentage'])
-        cursor = connection.cursor()
-        cursor.execute(query, values)
-        connection.commit()
-        cursor.close()
-        return jsonify({"message": "Project added successfully!"}), 201
+        
+        # Query to get total income per project
+        query_income = """
+            SELECT source AS project_name, SUM(amount) AS total_income
+            FROM income
+            GROUP BY source
+        """
+        
+        # Query to get total expenses per project
+        query_expenses = """
+            SELECT category AS project_name, SUM(amount) AS total_expenses
+            FROM expenses
+            GROUP BY category
+        """
+        
+        # Fetch income data
+        cursor.execute(query_income)
+        income_data = cursor.fetchall()
 
-@app.route('/projects/<int:project_id>', methods=['GET', 'PUT', 'DELETE'])
-def project_details(project_id):
-    connection = create_connection()
-    cursor = connection.cursor(dictionary=True)
-    
-    if request.method == 'GET':
-        cursor.execute("SELECT * FROM projects WHERE id = %s", (project_id,))
-        project_data = cursor.fetchone()
-        cursor.close()
-        return jsonify(project_data)
-    
-    elif request.method == 'PUT':
-        data = request.json
-        query = """UPDATE projects SET project_name = %s, project_status = %s, 
-                   total_income = %s, total_expenses = %s, profitability_percentage = %s 
-                   WHERE id = %s"""
-        values = (data['project_name'], data['project_status'], data['total_income'],
-                  data['total_expenses'], data['profitability_percentage'], project_id)
-        cursor.execute(query, values)
-        connection.commit()
-        cursor.close()
-        return jsonify({"message": "Project updated successfully!"})
+        # Fetch expenses data
+        cursor.execute(query_expenses)
+        expense_data = cursor.fetchall()
 
-    elif request.method == 'DELETE':
-        cursor.execute("DELETE FROM projects WHERE id = %s", (project_id,))
-        connection.commit()
-        cursor.close()
-        return jsonify({"message": "Project deleted successfully!"})
+        # Merge income and expenses data by project_name
+        project_financials = {}
+        
+        # Combine income data
+        for income in income_data:
+            project_name = income['project_name']
+            project_financials[project_name] = {
+                'total_income': float(income['total_income']),
+                'total_expenses': 0.00,  # Default value until expenses are added
+                'profit': 0.00  # Default value
+            }
 
-@app.route('/projects/<int:project_id>/income', methods=['POST'])
-def add_income(project_id):
-    connection = create_connection()
-    data = request.json
-    query = """INSERT INTO income (date, source, amount, category, payment_method, transaction_id, notes)
-               VALUES (%s, %s, %s, %s, %s, %s, %s)"""
-    values = (data['date'], data['source'], data['amount'], data['category'],
-              data['payment_method'], data.get('transaction_id'), data.get('notes'))
-    cursor = connection.cursor()
-    cursor.execute(query, values)
-    
-    # Update project total income
-    cursor.execute("UPDATE projects SET total_income = total_income + %s WHERE id = %s",
-                   (data['amount'], project_id))
-    connection.commit()
-    cursor.close()
-    return jsonify({"message": "Income record added successfully!"}), 201
+        # Add or merge expenses data
+        for expense in expense_data:
+            project_name = expense['project_name']
+            if project_name in project_financials:
+                project_financials[project_name]['total_expenses'] = float(expense['total_expenses'])
+            else:
+                project_financials[project_name] = {
+                    'total_income': 0.00,
+                    'total_expenses': float(expense['total_expenses']),
+                    'profit': 0.00
+                }
 
-@app.route('/projects/<int:project_id>/expenses', methods=['POST'])
-def add_expense(project_id):
-    connection = create_connection()
-    data = request.json
-    query = """INSERT INTO expenses (date, category, amount, notes, payment_method)
-               VALUES (%s, %s, %s, %s, %s)"""
-    values = (data['date'], data['category'], data['amount'],
-              data.get('notes'), data.get('payment_method'))
-    cursor = connection.cursor()
-    cursor.execute(query, values)
-    
-    # Update project total expenses
-    cursor.execute("UPDATE projects SET total_expenses = total_expenses + %s WHERE id = %s",
-                   (data['amount'], project_id))
-    connection.commit()
-    cursor.close()
-    return jsonify({"message": "Expense record added successfully!"}), 201
+        # Calculate profit for each project
+        for project_name, financials in project_financials.items():
+            financials['profit'] = financials['total_income'] - financials['total_expenses']
 
-@app.route('/projects/<int:project_id>/profitability', methods=['GET'])
-def calculate_profitability(project_id):
-    connection = create_connection()
-    cursor = connection.cursor(dictionary=True)
-    
-    query = """SELECT total_income, total_expenses, 
-                      (total_income - total_expenses) / NULLIF(total_income, 0) * 100 AS profitability_percentage
-               FROM projects WHERE id = %s"""
-    cursor.execute(query, (project_id,))
-    profitability_data = cursor.fetchone()
-    cursor.close()
-    
-    return jsonify(profitability_data)
+        return jsonify(project_financials)
 
+    except Error as e:
+        return jsonify({'error': str(e)}), 500
 
+    finally:
+        if connection:
+            cursor.close()
+            connection.close()
 
-
-
-
-@app.route('/projects/filter', methods=['GET'])
-def filter_projects():
-    status = request.args.get('status')
-    min_profitability = request.args.get('min_profitability', type=float, default=0)
-    max_profitability = request.args.get('max_profitability', type=float, default=100)
-    client_id = request.args.get('client_id', type=int)
-
-    query = "SELECT * FROM projects WHERE 1=1"
-    params = []
-
-    if status:
-        query += " AND project_status = %s"
-        params.append(status)
-
-    if client_id:
-        query += " AND client_id = %s"
-        params.append(client_id)
-
-    query += " AND profitability_percentage BETWEEN %s AND %s"
-    params.extend([min_profitability, max_profitability])
-
-    connection = create_connection()
-    cursor = connection.cursor(dictionary=True)
-    cursor.execute(query, params)
-    filtered_projects = cursor.fetchall()
-    cursor.close()
-    
-    return jsonify(filtered_projects)
-
-@app.route('/clients', methods=['GET', 'POST'])
-def manage_clients():
-    connection = create_connection()
-    
-    if request.method == 'GET':
-        cursor = connection.cursor(dictionary=True)
-        cursor.execute("SELECT * FROM clients")
-        clients_data = cursor.fetchall()
-        cursor.close()
-        return jsonify(clients_data)
-    
-    elif request.method == 'POST':
-        data = request.json
-        query = "INSERT INTO clients (client_name) VALUES (%s)"
-        values = (data['client_name'],)
-        cursor = connection.cursor()
-        cursor.execute(query, values)
-        connection.commit()
-        cursor.close()
-        return jsonify({"message": "Client added successfully!"}), 201
-
-
+# Run the Flask application
 if __name__ == '__main__':
     app.run(debug=True)
